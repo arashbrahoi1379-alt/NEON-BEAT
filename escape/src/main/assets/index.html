@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#05070b">
+<title>ESCAPE THE DARK - Prototype 01</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#030508;color:#fff;font-family:Tahoma,Arial,sans-serif;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:3}
+#top{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;gap:8px}
+.pill{background:#080d13d9;border:1px solid #91b6c044;border-radius:12px;padding:9px 12px;font-size:12px;backdrop-filter:blur(8px)}
+#objective{position:absolute;top:64px;right:12px;max-width:75%;line-height:1.7}
+#message{position:absolute;left:50%;bottom:18%;transform:translateX(-50%);background:#05080ddd;border:1px solid #a8d7e455;padding:10px 15px;border-radius:12px;font-size:13px;text-align:center;max-width:85%;opacity:0;transition:opacity .2s}
+#crosshair{position:absolute;left:50%;top:50%;width:8px;height:8px;border:1px solid #d9f4ff;border-radius:50%;transform:translate(-50%,-50%);opacity:.7}
+#menu{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at center,#14202aee,#020407f7 75%)}
+.panel{width:min(440px,100%);padding:25px 20px;border:1px solid #9dc6d04c;border-radius:20px;background:linear-gradient(145deg,#101a22f2,#05080df5);box-shadow:0 0 60px #5aa3c022;text-align:center}
+h1{font-size:30px;letter-spacing:2px;margin:0 0 8px;color:#d7f2ff;text-shadow:0 0 20px #60b7e8}
+p{font-size:13px;line-height:1.9;color:#c3d0d8}
+button{font-family:inherit;border:1px solid #9ed8ef66;background:linear-gradient(90deg,#17394a,#24546a);color:#fff;border-radius:12px;padding:13px 18px;font-size:14px;font-weight:bold}
+#start{width:100%;margin-top:12px}
+#controls{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+#stick{position:absolute;bottom:28px;left:24px;width:116px;height:116px;border:1px solid #d8f4ff66;border-radius:50%;background:#07131a77;pointer-events:auto;touch-action:none}
+#nub{position:absolute;width:48px;height:48px;left:33px;top:33px;border-radius:50%;background:#bceaff55;border:1px solid #d7f4ff99}
+#buttons{position:absolute;bottom:34px;right:18px;display:flex;flex-direction:column;gap:9px;pointer-events:auto}
+#buttons button{min-width:90px;padding:12px 10px;background:#07131ad9}
+#look{position:absolute;top:0;right:0;width:58%;height:72%;pointer-events:auto;touch-action:none}
+#hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:10px;color:#c7d7dfaa;white-space:nowrap}
+#end{display:none;position:fixed;inset:0;z-index:12;background:#020407ee;align-items:center;justify-content:center;padding:20px;text-align:center}
+@media (pointer:fine){#controls{display:none!important}}
+</style>
+</head>
+<body>
+<div id="hud">
+ <div id="top"><div class="pill">باتری: <b id="battery">100%</b></div><div class="pill">وضعیت: <b id="status">در جست‌وجوی خروج</b></div></div>
+ <div id="objective" class="pill">هدف: کلید اتاق نگهبانی را پیدا کن.</div>
+ <div id="crosshair"></div><div id="message"></div>
+</div>
+<div id="menu"><div class="panel"><h1>ESCAPE THE DARK</h1><p>بیمارستان خاموش شده است. کلید خروج در اتاق نگهبانی قرار دارد. چیزی در راهروها حرکت می‌کند... چراغ‌قوه‌ات را مدیریت کن و قبل از اینکه پیدایت کند فرار کن.</p><p>نسخه آزمایشی ۰۱ · مرحله اول: راهروی شرقی</p><button id="start">شروع کابوس</button><p style="font-size:10px;color:#8fa4b2">روی رایانه: WASD و ماوس · روی موبایل: جوی‌استیک و کشیدن سمت راست صفحه</p></div></div>
+<div id="controls"><div id="look"></div><div id="stick"><div id="nub"></div></div><div id="buttons"><button id="flash">چراغ‌قوه: روشن</button><button id="interact">تعامل</button><button id="run">دویدن</button></div><div id="hint">سمت راست صفحه را بکش تا نگاه کنی</div></div>
+<div id="end"><div class="panel"><h1 id="endTitle">پایان</h1><p id="endText"></p><button onclick="location.reload()">تلاش دوباره</button></div></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const $=id=>document.getElementById(id);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609); scene.fog=new THREE.FogExp2(0x05090d,.045);
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.08,90);
+camera.position.set(0,1.65,8);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x8da9bd,0x080b0e,.42));
+const ambient=new THREE.AmbientLight(0x526777,.22);scene.add(ambient);
+const flashlight=new THREE.SpotLight(0xd9f1ff,48,22,Math.PI/7,.48,1.5);
+flashlight.position.set(0,0,0); flashlight.castShadow=true; flashlight.shadow.mapSize.set(512,512);scene.add(flashlight);scene.add(flashlight.target);
+
+const mat=(color,roughness=.9,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness,metalness});
+const floorMat=mat(0x263039),wallMat=mat(0x35414a),ceilingMat=mat(0x1b252c),darkMat=mat(0x0c141a),doorMat=mat(0x39434a),rustMat=mat(0x4c2929);
+function box(x,y,z,sx,sy,sz,material,cast=true,receive=true){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=receive;scene.add(m);return m;
+}
+// Main corridor and adjoining room volumes
+box(0,-.16,0,8,.3,38,floorMat);box(0,3.25,0,8,.25,38,ceilingMat);
+box(-4,1.5,0,.25,3.2,38,wallMat);box(4,1.5,0,.25,3.2,38,wallMat);
+box(0,1.5,-19,8,3.2,.25,wallMat);box(0,1.5,19,8,3.2,.25,wallMat);
+// corridor wall panels, doors, room markers
+for(let z=-16;z<=14;z+=5){
+ box(-3.82,1.25,z, .08,2.5,1.7,doorMat);
+ box(3.82,1.25,z+2.2,.08,2.5,1.7,doorMat);
+ box(-3.55,.18,z,.45,.08,1.9,darkMat);box(3.55,.18,z+2.2,.45,.08,1.9,darkMat);
+}
+// Room at east end, guard room doorway area
+box(-1.9,1.5,-13,4.2,3.1,.2,wallMat);
+box(1.9,1.5,-13,4.2,3.1,.2,wallMat);
+box(0,3.05,-13,3.8,.2,.2,wallMat);
+// exit door at far end
+const exitDoor=box(0,1.45,-18.65,2.2,2.8,.25,rustMat);
+box(0,2.9,-18.5,2.6,.12,.12,mat(0x91a5ad));
+const doorLight=box(0,2.45,-18.42,.22,.12,.06,mat(0x9a2525));
+ // ceiling lamps
+const lamps=[];
+for(let z=15;z>=-15;z-=6){
+ const light=new THREE.PointLight(0x9fc8dc,1.4,8,2);light.position.set(0,2.85,z);scene.add(light);lamps.push(light);
+ box(0,3.05,z,1.1,.08,.35,mat(0x82939b,.4));
+}
+// props: beds, cabinets, medical carts
+for(const z of [9,2,-5]){
+ box(-2.6,.65,z,1.35,.22,2.2,mat(0x59646a,.7));
+ box(-2.6,.9,z-.65,1.25,.25,.6,mat(0x9aa4a8,.7));
+ box(2.55,.95,z+1,1.05,1.8,.75,mat(0x34434b));
+ box(2.55,1.9,z+1,1.1,.08,.8,mat(0x64747b));
+}
+// scattered debris
+for(let i=0;i<18;i++){let x=(Math.random()-.5)*6.5,z=13-Math.random()*29;let o=box(x,.02,z,.15+Math.random()*.35,.04,.12+Math.random()*.3,mat(0x53616a));o.rotation.y=Math.random()*3;}
+// door/locker props and flicker points
+const key= new THREE.Group();const keyRing=new THREE.Mesh(new THREE.TorusGeometry(.13,.035,8,16),mat(0xd7b65c,.35,.65));key.add(keyRing);
+const keyStem=box(0,0,0,.06,.32,.06,mat(0xd7b65c,.35,.65),false);keyStem.position.y=-.2;key.add(keyStem);key.position.set(-2.5,.85,-11.2);scene.add(key);
+const keyGlow=new THREE.PointLight(0xffd47a,1.8,3);keyGlow.position.copy(key.position);scene.add(keyGlow);
+// monster: crude mutated silhouette with glowing eyes
+const monster=new THREE.Group();scene.add(monster);
+const flesh=mat(0x343d3c),fleshDark=mat(0x171e20),eyeMat=new THREE.MeshBasicMaterial({color:0xff3227});
+function part(parent,geo,material,x,y,z,sx=1,sy=1,sz=1){const m=new THREE.Mesh(geo,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m}
+part(monster,new THREE.CapsuleGeometry(.43,.95,5,8),flesh,0,1.25,0,1,1.2,.75);
+part(monster,new THREE.SphereGeometry(.34,12,10),fleshDark,0,2.15,-.05,1,.9,.8);
+part(monster,new THREE.ConeGeometry(.18,.65,7),flesh,0,2.52,-.04,1,1,1);
+for(const x of [-.14,.14])part(monster,new THREE.SphereGeometry(.055,8,8),eyeMat,x,2.22,-.34);
+for(const side of [-1,1]){
+ part(monster,new THREE.CapsuleGeometry(.12,.95,4,6),flesh,side*.55,1.25,-.02,1,1,1).rotation.z=side*.25;
+ part(monster,new THREE.CapsuleGeometry(.1,.9,4,6),fleshDark,side*.25,.38,.02,1,1,1).rotation.z=-side*.1;
+}
+monster.position.set(2,0,-10);monster.visible=true;
+
+let started=false,hasKey=false,flashOn=true,battery=100,dead=false,won=false;
+let yaw=0,pitch=0,moveX=0,moveY=0,running=false,last=performance.now(),messageTimer=0,monsterState='wait';
+const keys={};
+function say(t,ms=2400){$('message').textContent=t;$('message').style.opacity=1;messageTimer=ms}
+function finish(win){dead=true;won=win;$('end').style.display='flex';$('endTitle').textContent=win?'فرار کردی':'تو را پیدا کرد';$('endText').textContent=win?'از بیمارستان فرار کردی؛ اما صدای قدم‌ها هنوز پشت سرت است.':'موجود جهش‌یافته تو را پیدا کرد. این بار باید باهوش‌تر حرکت کنی.'}
+function setFlash(v){flashOn=v;flashlight.visible=v;$('flash').textContent='چراغ‌قوه: '+(v?'روشن':'خاموش')}
+function dist(a,b){return Math.hypot(a.x-b.x,a.z-b.z)}
+function interact(){
+ if(!started||dead)return;
+ if(!hasKey&&dist(camera.position,key.position)<2.2){hasKey=true;scene.remove(key);scene.remove(keyGlow);$('objective').textContent='هدف: به در خروج در انتهای راهرو برگرد.';say('کلید را پیدا کردی. صدای فلز در راهرو پیچید...');monsterState='hunt';return}
+ if(hasKey&&dist(camera.position,exitDoor.position)<2.6){finish(true);return}
+ say(hasKey?'به در خروج نزدیک شو.':'چیزی برای برداشتن در دسترس نیست.');
+}
+function start(){started=true;$('menu').style.display='none';$('controls').style.display='block';if(matchMedia('(pointer:fine)').matches)renderer.domElement.requestPointerLock?.();say('اتاق نگهبانی را پیدا کن. مراقب صداها باش.',3200);last=performance.now();animate()}
+$('start').onclick=start;$('flash').onclick=()=>setFlash(!flashOn);$('interact').onclick=interact;
+$('run').onpointerdown=()=>running=true;$('run').onpointerup=()=>running=false;$('run').onpointerleave=()=>running=false;
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyE')interact();if(e.code==='KeyF')setFlash(!flashOn);if(e.code==='ShiftLeft')running=true});
+addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='ShiftLeft')running=false});
+addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement){yaw-=e.movementX*.0022;pitch=Math.max(-1.15,Math.min(1.15,pitch-e.movementY*.0022));}});
+const stick=$('stick'),nub=$('nub');let stickId=null,lookId=null,lastLook=null;
+stick.addEventListener('pointerdown',e=>{stickId=e.pointerId;stick.setPointerCapture(stickId);moveStick(e)});
+stick.addEventListener('pointermove',e=>{if(e.pointerId===stickId)moveStick(e)});
+function moveStick(e){const r=stick.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),len=Math.hypot(dx,dy),k=Math.min(1,48/(len||1));moveX=dx*k/48;moveY=dy*k/48;nub.style.transform=`translate(${moveX*38}px,${moveY*38}px)`}
+function resetStick(){stickId=null;moveX=moveY=0;nub.style.transform=''}
+stick.addEventListener('pointerup',resetStick);stick.addEventListener('pointercancel',resetStick);
+$('look').addEventListener('pointerdown',e=>{lookId=e.pointerId;lastLook={x:e.clientX,y:e.clientY};$('look').setPointerCapture(lookId)});
+$('look').addEventListener('pointermove',e=>{if(e.pointerId!==lookId||!lastLook)return;let dx=e.clientX-lastLook.x,dy=e.clientY-lastLook.y;lastLook={x:e.clientX,y:e.clientY};yaw-=dx*.006;pitch=Math.max(-1.15,Math.min(1.15,pitch-dy*.006))});
+$('look').addEventListener('pointerup',()=>{lookId=null;lastLook=null});$('look').addEventListener('pointercancel',()=>{lookId=null;lastLook=null});
+
+function blocked(x,z){
+ // corridor boundaries; simple collision against walls and furniture
+ if(x<-3.45||x>3.45||z<-18.2||z>18.2)return true;
+ const obstacles=[[-2.6,9,.85,1.25],[2.55,3, .7,.65],[-2.6,2,.85,1.25],[2.55,-4,.7,.65],[-2.6,-5,.85,1.25]];
+ return obstacles.some(([ox,oz,rx,rz])=>Math.abs(x-ox)<rx&&Math.abs(z-oz)<rz);
+}
+function animate(now=performance.now()){
+ if(!started||dead)return;requestAnimationFrame(animate);
+ const dt=Math.min(.04,(now-last)/1000);last=now;
+ const forward=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0)-moveY;
+ const strafe=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)+moveX;
+ const speed=running?4.1:2.25;
+ const dx=(Math.sin(yaw)*forward+Math.cos(yaw)*strafe)*speed*dt;
+ const dz=(-Math.cos(yaw)*forward+Math.sin(yaw)*strafe)*speed*dt;
+ const nx=camera.position.x+dx,nz=camera.position.z+dz;
+ if(!blocked(nx,camera.position.z))camera.position.x=nx;
+ if(!blocked(camera.position.x,nz))camera.position.z=nz;
+ camera.position.y=1.65;camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;
+ flashlight.position.copy(camera.position);flashlight.position.y+=.05;
+ const dir=new THREE.Vector3(0,0,-1).applyEuler(camera.rotation);flashlight.target.position.copy(camera.position).add(dir.multiplyScalar(8));
+ if(flashOn){battery=Math.max(0,battery-dt*(running?1.35:.55));if(battery===0){setFlash(false);say('باتری چراغ‌قوه تمام شد!',2600)}}$('battery').textContent=Math.ceil(battery)+'%';
+ // flickering corridor lights
+ lamps.forEach((l,i)=>{l.intensity=(Math.sin(now*.003+i*9)>-.93?1.25:.08)*(0.8+Math.sin(now*.001+i)*.15)});
+ key.rotation.y+=dt*1.1;key.position.y=.85+Math.sin(now*.002)*.08;keyGlow.intensity=1.4+Math.sin(now*.006)*.45;
+ // monster waits until key pickup, then pursues with a little delay
+ if(monsterState==='hunt'){
+  const dxp=camera.position.x-monster.position.x,dzp=camera.position.z-monster.position.z,d=Math.hypot(dxp,dzp);
+  if(d>0.01){const v=1.35;monster.position.x+=dxp/d*v*dt;monster.position.z+=dzp/d*v*dt;monster.rotation.y=Math.atan2(dxp,dzp)}
+  if(d<1.25)finish(false);
+ }
+ if(messageTimer>0){messageTimer-=dt*1000;if(messageTimer<=0)$('message').style.opacity=0}
+ renderer.render(scene,camera);
+}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5))});
+</script>
+</body></html>
