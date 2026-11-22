@@ -127,7 +127,89 @@ function interact(){
  if(hasKey&&dist(camera.position,exitDoor.position)<2.6){finish(true);return}
  say(hasKey?'به در خروج نزدیک شو.':'چیزی برای برداشتن در دسترس نیست.');
 }
-function start(){started=true;$('menu').style.display='none';$('controls').style.display='block';if(matchMedia('(pointer:fine)').matches)renderer.domElement.requestPointerLock?.();say('اتاق نگهبانی را پیدا کن. مراقب صداها باش.',3200);last=performance.now();animate()}
+
+// FOOTSTEPS AND MUTANT CREATURE AUDIO
+let stepClock=0,growlClock=0;
+
+
+let audioCtx=null;
+function startAudio(){
+ try{
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC)return;
+  if(audioCtx){audioCtx.resume();return;}
+  audioCtx=new AC();
+
+  const master=audioCtx.createGain();
+  master.gain.value=0.22;
+  master.connect(audioCtx.destination);
+
+  [48,50,96].forEach((f,i)=>{
+   const osc=audioCtx.createOscillator();
+   const gain=audioCtx.createGain();
+   osc.type=i===2?'triangle':'sine';
+   osc.frequency.value=f;
+   gain.gain.value=i===2?0.025:0.045;
+   osc.connect(gain);
+   gain.connect(master);
+   osc.start();
+  });
+
+  const length=audioCtx.sampleRate*3;
+  const buffer=audioCtx.createBuffer(1,length,audioCtx.sampleRate);
+  const data=buffer.getChannelData(0);
+  for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*0.35;
+
+  const noise=audioCtx.createBufferSource();
+  noise.buffer=buffer;
+  noise.loop=true;
+  const filter=audioCtx.createBiquadFilter();
+  filter.type='lowpass';
+  filter.frequency.value=300;
+  const wind=audioCtx.createGain();
+  wind.gain.value=0.12;
+  noise.connect(filter);
+  filter.connect(wind);
+  wind.connect(master);
+  noise.start();
+ }catch(e){console.warn('Audio unavailable',e);}
+}
+
+function playFootstep(){
+ if(!audioCtx)return;
+ const duration=0.11;
+ const buffer=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*duration),audioCtx.sampleRate);
+ const data=buffer.getChannelData(0);
+ for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/data.length,3);
+ const src=audioCtx.createBufferSource();
+ const filter=audioCtx.createBiquadFilter();
+ const gain=audioCtx.createGain();
+ src.buffer=buffer;
+ filter.type='lowpass';filter.frequency.value=170;
+ gain.gain.setValueAtTime(0.22,audioCtx.currentTime);
+ gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+duration);
+ src.connect(filter);filter.connect(gain);gain.connect(audioCtx.destination);
+ src.start();
+}
+
+function playMonsterGrowl(){
+ if(!audioCtx)return;
+ const now=audioCtx.currentTime;
+ const osc=audioCtx.createOscillator();
+ const gain=audioCtx.createGain();
+ const filter=audioCtx.createBiquadFilter();
+ osc.type='sawtooth';
+ osc.frequency.setValueAtTime(68,now);
+ osc.frequency.exponentialRampToValueAtTime(35,now+1.3);
+ filter.type='lowpass';filter.frequency.value=125;
+ gain.gain.setValueAtTime(0.0001,now);
+ gain.gain.linearRampToValueAtTime(0.16,now+0.25);
+ gain.gain.exponentialRampToValueAtTime(0.0001,now+1.5);
+ osc.connect(filter);filter.connect(gain);gain.connect(audioCtx.destination);
+ osc.start(now);osc.stop(now+1.55);
+}
+
+function start(){startAudio();started=true;$('menu').style.display='none';$('controls').style.display='block';if(matchMedia('(pointer:fine)').matches)renderer.domElement.requestPointerLock?.();say('اتاق نگهبانی را پیدا کن. مراقب صداها باش.',3200);last=performance.now();animate()}
 $('start').onclick=start;$('flash').onclick=()=>setFlash(!flashOn);$('interact').onclick=interact;
 $('run').onpointerdown=()=>running=true;$('run').onpointerup=()=>running=false;$('run').onpointerleave=()=>running=false;
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyE')interact();if(e.code==='KeyF')setFlash(!flashOn);if(e.code==='ShiftLeft')running=true});
@@ -152,8 +234,26 @@ function blocked(x,z){
 function animate(now=performance.now()){
  if(!started||dead)return;requestAnimationFrame(animate);
  const dt=Math.min(.04,(now-last)/1000);last=now;
- const forward=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0)-moveY;
+const forward=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0)-moveY;
  const strafe=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)+moveX;
+const moving=Math.abs(forward)>0.12||Math.abs(strafe)>0.12;
+ if(moving){
+  stepClock-=dt;
+  if(stepClock<=0){
+   playFootstep();
+   stepClock=running?0.34:0.58;
+  }
+ }else stepClock=0;
+ if(monsterState==='hunt'&&audioCtx){
+  growlClock-=dt;
+  const md=dist(camera.position,monster.position);
+  if(md<9&&growlClock<=0){
+   playMonsterGrowl();
+   growlClock=md<4?3.5:6.5;
+  }
+ }
+
+ 
  const speed=running?4.1:2.25;
  const dx=(Math.sin(yaw)*forward+Math.cos(yaw)*strafe)*speed*dt;
  const dz=(-Math.cos(yaw)*forward+Math.sin(yaw)*strafe)*speed*dt;
